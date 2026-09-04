@@ -206,11 +206,11 @@ The `/clear` command resets the stored context.
 
 The bot responds to user messages through Telegram and sends the generated Groq response back to the user.
 
-![TeleAgent Output](outputs/image.png)
+![TeleAgent Output](outputs/1.png)
 
 ### Additional Output
 
-![TeleAgent Chat Output](outputs/1.png)
+![TeleAgent Chat Output](outputs/2.png)
 
 ## 🔑 Environment Variables
 
