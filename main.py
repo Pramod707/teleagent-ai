@@ -4,7 +4,6 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 
@@ -13,7 +12,7 @@ from aiogram.filters import CommandStart, Command
 # Load environment variables
 # --------------------------------------------------
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -28,7 +27,6 @@ print("Groq key loaded:", GROQ_API_KEY is not None)
 # --------------------------------------------------
 
 client = Groq(api_key=GROQ_API_KEY)
-
 model_name = "groq/compound-mini"
 
 
@@ -41,18 +39,37 @@ dp = Dispatcher()
 
 
 # --------------------------------------------------
-# Store conversation reference
+# Store conversation history per Telegram user
 # --------------------------------------------------
 
+SYSTEM_MESSAGE = {
+    "role": "system",
+    "content": """
+You are TeleAgent, a helpful and conversational AI assistant inside Telegram.
 
-class Reference:
-    """Store the conversation history."""
+Respond naturally and concisely.
 
-    def __init__(self) -> None:
-        self.messages = [{"role": "system", "content": "You are a helpful assistant"}]
+Use plain text formatting suitable for Telegram.
+
+Do not generate Markdown links.
+Do not generate URLs unless the user explicitly asks for a link.
+Do not include unnecessary emojis.
+Do not provide a generic list of capabilities unless the user asks what you can do.
+
+Answer the user's actual question directly.
+""",
+}
+
+user_histories = {}
 
 
-reference = Reference()
+def get_user_history(user_id: int):
+    """Get or create conversation history for a Telegram user."""
+
+    if user_id not in user_histories:
+        user_histories[user_id] = [SYSTEM_MESSAGE.copy()]
+
+    return user_histories[user_id]
 
 
 # --------------------------------------------------
@@ -62,8 +79,6 @@ reference = Reference()
 
 @dp.message(CommandStart())
 async def start_handler(message: types.Message):
-    """Handler for the /start command."""
-
     await message.answer("Hello! I am TeleAgent 🤖. How can I assist you?")
 
 
@@ -77,17 +92,17 @@ async def groq_handler(message: types.Message):
 
     print(f">>> User:\n\t{message.text}")
 
-    # Add user's message to history
-    reference.messages.append({"role": "user", "content": message.text})
+    user_id = message.from_user.id
 
-    response = client.chat.completions.create(
-        model="groq/compound-mini", messages=reference.messages
-    )
+    messages = get_user_history(user_id)
+
+    messages.append({"role": "user", "content": message.text})
+
+    response = client.chat.completions.create(model=model_name, messages=messages)
 
     assistant_response = response.choices[0].message.content
 
-    # Add Groq's response to history
-    reference.messages.append({"role": "assistant", "content": assistant_response})
+    messages.append({"role": "assistant", "content": assistant_response})
 
     print(f"<<< Groq:\n\t{assistant_response}")
 
@@ -97,10 +112,16 @@ async def groq_handler(message: types.Message):
 # --------------------------------------------------
 # /clear
 # --------------------------------------------------
-def clear_past():
-    """Clear the conversation history."""
 
-    reference.messages = [{"role": "system", "content": "You are a helpful assistant"}]
+
+@dp.message(Command("clear"))
+async def clear_handler(message: types.Message):
+
+    user_id = message.from_user.id
+
+    user_histories[user_id] = [SYSTEM_MESSAGE.copy()]
+
+    await message.answer("Conversation history cleared 🧹")
 
 
 # --------------------------------------------------
@@ -110,15 +131,14 @@ def clear_past():
 
 @dp.message(Command("help"))
 async def help_handler(message: types.Message):
-    """Display the help menu."""
 
     help_command = """
-Hi There, I'm Groq-AI Telegram Bot 🤖!
+Hi! I'm TeleAgent 🤖
 
-Please follow these commands:
+Available commands:
 
 /start - Start the bot
-/clear - Clear the past conversation and context
+/clear - Clear your conversation history
 /help - Display this help menu
 """
 
